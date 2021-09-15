@@ -60,7 +60,7 @@
 
 ; замена лица во фразе			
 (define (change-person phrase)
-        (many-replace '((am are)
+        (many-replace-v2 '((am are)
                         (are am)
                         (i you)
                         (me you)
@@ -95,6 +95,17 @@
          )
   )
 
+;ex 2
+(define (many-replace-v2 replacement-pairs lst)
+  (let loop ((result `()) (others lst))
+             (if (null? others)
+                    result
+                    (let ((pat-rep (assoc (car others) replacement-pairs)))
+                      (loop (cons (if pat-rep (cadr pat-rep) (car others)) result) (cdr others))
+                      )
+                    )
+    )
+  )
 ; 2й способ генерации ответной реплики -- случайный выбор одной из заготовленных фраз, не связанных с репликой пользователя
 (define (hedge)
        (pick-random-vector '#((please go on)
