@@ -13,6 +13,31 @@
   (doctor-driver-loop-v2 name)
 )
 
+; block 2 ex 5
+(define (ask-patient-name)
+ (begin
+  (println '(next!))
+  (println '(who are you?))
+  (print '**)
+  (car (read))
+ ) 
+)
+
+(define (visit-doctor-v2 time-to-goodbye max-workflow)
+  (let loop ((more-clients max-workflow))
+    (
+     cond ((> more-clients 0)
+           (let ask ((curr-name (ask-patient-name)))
+             (cond ((equal? curr-name time-to-goodbye) `(time to go home))
+                (else (printf "Hello, ~a!\n" curr-name)
+                      (print '(what seems to be the trouble?))
+                      (doctor-driver-loop-v2 curr-name)
+                      (loop (- more-clients 1))))))
+          (else `(time to go home))
+  )
+  )
+  )
+
 ; цикл диалога Доктора с пациентом
 ; параметр name -- имя пациента
 (define (doctor-driver-loop name)
@@ -22,7 +47,7 @@
       (cond 
 	    ((equal? user-response '(goodbye)) ; реплика '(goodbye) служит для выхода из цикла
              (printf "Goodbye, ~a!\n" name)
-             (print '(see you next week)))
+             (print `(see you next week)))
             (else (print (reply user-response)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
                   (doctor-driver-loop name)
              )
@@ -33,20 +58,19 @@
 ; ex 4
 (define (doctor-driver-loop-v2 name)
   (let loop ((prev-responses #()))
-    (
      (newline)
      (print '**) ; доктор ждёт ввода реплики пациента, приглашением к которому является **
      (let ((user-response (read)))
        (cond
          ((equal? user-response '(goodbye)) ; реплика '(goodbye) служит для выхода из цикла
           (printf "Goodbye, ~a!\n" name)
-          (print '(see you next week)))
+          (print '(see you next week))
+          (newline))
          (else (print (reply-v2 user-response prev-responses)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
                (loop (vector-append (vector user-response) prev-responses))
              )
        )
       )
-     )
     )
   )
 
@@ -125,7 +149,7 @@
          )
   )
 
-;ex 2
+; block 1 ex 2
 (define (many-replace-v2 replacement-pairs lst)
   (let loop ((result `()) (others lst))
              (if (null? others)
@@ -137,7 +161,7 @@
     )
   )
 
-;ex 3
+;block 1 ex 3
 (define (many-replace-v3 replacement-pairs lst)
   (map (lambda (word) (let ((pat-rep (assoc word replacement-pairs))) (if pat-rep (cadr pat-rep) word))) lst)
    )
@@ -153,7 +177,7 @@
          )
 )
 
-;3rd way to generate an answer - remember one of the previous user responses
+;block 1 ex 4 3rd way to generate an answer - remember one of the previous user responses
 (define (history-answer prev-responses)
   (append `(earlier you said that) (change-person (pick-random-vector prev-responses)))
   )
