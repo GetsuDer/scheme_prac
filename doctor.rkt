@@ -10,7 +10,7 @@
 (define (visit-doctor name)
   (printf "Hello, ~a!\n" name)
   (print '(what seems to be the trouble?))
-  (doctor-driver-loop name)
+  (doctor-driver-loop-v2 name)
 )
 
 ; цикл диалога Доктора с пациентом
@@ -30,6 +30,26 @@
       )
 )
 
+; ex 4
+(define (doctor-driver-loop-v2 name)
+  (let loop ((prev-responses #()))
+    (
+     (newline)
+     (print '**) ; доктор ждёт ввода реплики пациента, приглашением к которому является **
+     (let ((user-response (read)))
+       (cond
+         ((equal? user-response '(goodbye)) ; реплика '(goodbye) служит для выхода из цикла
+          (printf "Goodbye, ~a!\n" name)
+          (print '(see you next week)))
+         (else (print (reply-v2 user-response prev-responses)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
+               (loop (vector-append (vector user-response) prev-responses))
+             )
+       )
+      )
+     )
+    )
+  )
+
 ; генерация ответной реплики по user-response -- реплике от пользователя 
 (define (reply user-response)
       (case (random 2) ; с равной вероятностью выбирается один из двух способов построения ответа
@@ -37,7 +57,17 @@
           ((1) (hedge))  ; 2й способ
       )
 )
-			
+
+(define (reply-v2 user-response prev-responses)
+  (case (random 3)
+    ((0) (qualifier-answer user-response))
+    ((1) (hedge))
+    ; next is reply, not reply-v2 to exclude history-answer variant
+    ; it is possible just repeat random call while not history-answer is chosen, but current variant is faster
+    ((2) (if (vector-empty? prev-responses) (reply user-response) (history-answer prev-responses)))
+    )
+  )
+
 ; 1й способ генерации ответной реплики -- замена лица в реплике пользователя и приписывание к результату нового начала
 (define (qualifier-answer user-response)
         (append (pick-random-vector '#((you seem to think that)
@@ -122,3 +152,8 @@
                               (i am listening))
          )
 )
+
+;3rd way to generate an answer - remember one of the previous user responses
+(define (history-answer prev-responses)
+  (append `(earlier you said that) (change-person (pick-random-vector prev-responses)))
+  )
