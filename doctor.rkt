@@ -99,7 +99,7 @@
           (printf "Goodbye, ~a!\n" name)
           (print '(see you next week))
           (newline))
-         (else (print (reply-v2 user-response prev-responses)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
+         (else (print (reply-v3 user-response prev-responses all-keywords)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
                (loop (vector-append (vector user-response) prev-responses) all-keywords)
              )
        )
@@ -132,7 +132,8 @@
     ; next is reply, not reply-v2 to exclude history-answer variant
     ; it is possible just repeat random call while not history-answer is chosen, but current variant is faster
     ((2) (if (vector-empty? prev-responses) (reply user-response) (history-answer prev-responses)))
-    ((3) (if (check-for-keywords user-response all-keywords) (answer-by-keyword user-response all-keywords) (reply-v2 user-response prev-responses)))
+    ((3)
+     (if (check-for-keywords user-response all-keywords) (answer-by-keyword user-response all-keywords) (reply-v2 user-response prev-responses)))
     )
   )
 ; 1й способ генерации ответной реплики -- замена лица в реплике пользователя и приписывание к результату нового начала
@@ -238,7 +239,8 @@
   ( ; начало данных 2й группы ...
     (mother father parents brother sister uncle ant grandma grandpa son daughter)
     (
-	  (tell me more about your * , i want to know all about your *)
+	  (tell me more about your * )
+          (i want to know all about your *)
           (why do you feel that way about your * ?)
 	)
   )
@@ -267,21 +269,25 @@
 ))
 
 ; one more strategy
-(define (answer-by-keyword phrase keywords)
+(define (answer-by-keyword phrase all-keywords)
   ; returns list of all keywords of phrase and its length (length . lst)
-  (define (get-all-keywords phrase all-keywords)
-    (foldl (lambda (res curr) (if (assoc curr all-keywords) (cons (+ 1 (car res)) (cons (curr (cdr res)))) (res)))
+  (define (get-all-keywords)
+    (foldl (lambda (curr res) (if (member curr all-keywords) (cons (+ 1 (car res)) (cons curr (cdr res))) res))
          (list 0 `()) phrase)
   )
 
   ; gets all answers and their number (from possible) (length. answers)
   (define (get-possible-answers-by-keyword keyword)
     (let loop ((result (list 0 `())) (i (- (vector-length keywords_structure) 1)))
-      (if (< i 0) result
-          (let ((more (assoc keyword (car (vector-ref keywords_structure i)))))
-            (cons (+ (length more) (car result)) (append more (cdr result)))
+      (cond ((< i 0) result)
+            (else (let ((curr-keywords (car (vector-ref keywords_structure i))) (curr-templates (car (cdr (vector-ref keywords_structure i)))))
+                    (cond ((member keyword curr-keywords)
+                           (loop (cons (+ (length curr-templates) (car result)) (append curr-templates (cdr result))) (- i 1)))
+                          (else (loop result (- i 1)))
+                          )
+                    )
+                  )
             )
-          )
       )
     )
 
@@ -294,21 +300,22 @@
     (list-ref (cdr length-lst) (random (car length-lst)))
     )
 
-  (define (get-keyword-from-phrase phrase all-keywords)
-    (pick-random-list (get-all-keywords phrase all-keywords)))
-  (let get-ans ((keyword (get-keyword-from-phrase phrase keywords)))
+  (define (get-keyword-from-phrase)
+    (pick-random-list (get-all-keywords)))
+  (let get-ans ((keyword (get-keyword-from-phrase)))
     (many-replace-v3 (list (list `* keyword)) (get-answer-by-keyword keyword))
   )
   )
 
 (define (check-for-keywords phrase all-keywords)
-  (ormap (lambda (x) (assoc x all-keywords)) phrase)
+  (ormap (lambda (x) (member x all-keywords)) phrase)
   )
 
 (define (get-all-possible-keywords)
       (let loop ((result `()) (i (- (vector-length keywords_structure) 1)))
       (if (< i 0) result
-          (append (car (vector-ref keywords_structure i)) result))
+          (loop (append (car (vector-ref keywords_structure i)) result) (- i 1))
+          )
         )
   )
    
