@@ -35,16 +35,18 @@
             )
            )
     )
+
+  (define (print-tree-inner tail)
+    (cond ((empty-tree? tail) `())
+            (else
+             (cons (list (tree-data tail)) (merge (print-tree-inner (tree-right tail)) (print-tree-inner (tree-left tail))))
+             )
+            )
+    )
   
   (print-tree
    (reverse
-    (let loop ((res `()) (tail tree))
-      (cond ((empty-tree? tail) `())
-            (else
-             (cons (list (tree-data tail)) (merge (loop res (tree-right tail)) (loop res (tree-left tail))))
-             )
-            )
-      )
+    (print-tree-inner tree)
     )
    )
   )
