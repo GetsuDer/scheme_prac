@@ -18,12 +18,14 @@
            )
           )
     )
+
   (define (merge lst1 lst2)
     (cond ((null? lst1) lst2)
           ((null? lst2) lst1)
           (else (cons (append (car lst1) (car lst2)) (merge (cdr lst1) (cdr lst2))))
-        )
+          )
     )
+  
   (define (print-tree lst-of-lsts)
     (cond ((null? lst-of-lsts) (void))
            (else
@@ -33,15 +35,16 @@
             )
            )
     )
-  (print-tree (reverse
-   (let loop ((res `()) (tail tree))
-    (cond ((empty-tree? tail) `())
-          (else
-           (cons (list (tree-data tail)) (merge (loop res (tree-right tail)) (loop res (tree-left tail))))
-           )
-          )
+  
+  (print-tree
+   (reverse
+    (let loop ((res `()) (tail tree))
+      (cond ((empty-tree? tail) `())
+            (else
+             (cons (list (tree-data tail)) (merge (loop res (tree-right tail)) (loop res (tree-left tail))))
+             )
+            )
+      )
     )
    )
-              )
-  
   )
