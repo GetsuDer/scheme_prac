@@ -20,7 +20,8 @@
     )
 
   (define (merge lst1 lst2)
-    (cond ((null? lst1) lst2)
+    (cond ((and (null? lst1) (null? lst2)) `())
+          ((null? lst1) lst2)
           ((null? lst2) lst1)
           (else (cons (append (car lst1) (car lst2)) (merge (cdr lst1) (cdr lst2))))
           )
@@ -36,17 +37,29 @@
            )
     )
 
-  (define (print-tree-inner tail)
-    (cond ((empty-tree? tail) `())
+  (define (print-tree-inner-cps tail cc)
+    (cond ((empty-tree? tail) (cc `()))
             (else
-             (cons (list (tree-data tail)) (merge (print-tree-inner (tree-right tail)) (print-tree-inner (tree-left tail))))
+             (print-tree-inner-cps
+              (tree-right tail)
+              (lambda (y)
+                (print-tree-inner-cps
+                 (tree-left tail)
+                 (lambda (z) (cc (if (null? (merge y z)) (list (list (tree-data tail))) (list (list (tree-data tail)) (merge y z)))))
+                 )
+                )
+              )
              )
             )
     )
-  
+           
+  ; (lambda (y) (cc (list (tree-data tail)) (merge y (print-tree-inner (tree-left tail))
+  ; (lambda (z) (cc (list (tree-data tail)) (merge y z)
+  ; (lambda (y) (print-tree-inner (tree-left tail) (lambda (z) (cc (list (tree-data tail) (merge y z))
   (print-tree
    (reverse
-    (print-tree-inner tree)
+    (print-tree-inner-cps tree (lambda (x) x))
     )
    )
+  (print-tree-inner-cps tree (lambda (x) x))
   )
