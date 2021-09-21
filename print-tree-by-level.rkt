@@ -9,6 +9,7 @@
 (define (tree-right tree) (vector-ref tree 2))
 (define (empty-tree? t) (equal? t #()))
 
+
 (define  (print-tree-by-level-desc tree)
   (define (print-parentless-list lst)
     (cond ((null? lst) (void))
@@ -45,21 +46,17 @@
               (lambda (y)
                 (print-tree-inner-cps
                  (tree-left tail)
-                 (lambda (z) (cc (if (null? (merge y z)) (list (list (tree-data tail))) (list (list (tree-data tail)) (merge y z)))))
+                 (lambda (z) (cc (if (null? (merge y z)) (list (list (tree-data tail))) (append (list (list (tree-data tail))) (merge y z)))))
                  )
                 )
               )
              )
             )
     )
-           
-  ; (lambda (y) (cc (list (tree-data tail)) (merge y (print-tree-inner (tree-left tail))
-  ; (lambda (z) (cc (list (tree-data tail)) (merge y z)
-  ; (lambda (y) (print-tree-inner (tree-left tail) (lambda (z) (cc (list (tree-data tail) (merge y z))
+  
   (print-tree
    (reverse
     (print-tree-inner-cps tree (lambda (x) x))
     )
    )
-  (print-tree-inner-cps tree (lambda (x) x))
   )
