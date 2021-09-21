@@ -295,7 +295,7 @@
   (define (get-possible-answers-by-keyword keyword)
     (let loop ((result (cons 0 `())) (i (- (vector-length keywords_structure) 1)))
       (cond ((< i 0) result)
-            (else (let ((curr-keywords (car (vector-ref keywords_structure i))) (curr-templates (car (cdr (vector-ref keywords_structure i)))))
+            (else (let ((curr-keywords (car (vector-ref keywords_structure i))) (curr-templates (cadr (vector-ref keywords_structure i))))
                     (cond ((member keyword curr-keywords)
                            (loop (cons (+ (length curr-templates) (car result)) (append curr-templates (cdr result))) (- i 1)))
                           (else (loop result (- i 1)))
