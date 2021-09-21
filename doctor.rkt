@@ -34,8 +34,8 @@
                       (doctor-driver-loop-v2 curr-name)
                       (loop (- more-clients 1))))))
           (else `(time to go home))
-  )
-  )
+          )
+    )
   )
 
 (define (visit-doctor-v3 time-to-goodbye max-workflow)
@@ -49,8 +49,8 @@
                       (doctor-driver-loop-v3 curr-name)
                       (loop (- more-clients 1))))))
           (else `(time to go home))
-  )
-  )
+          )
+    )
   )
 
 ; цикл диалога Доктора с пациентом
@@ -90,7 +90,7 @@
   )
 
 (define (doctor-driver-loop-v3 name)
-  (let loop ((prev-responses #()) (all-keywords (get-all-possible-keywords)))
+  (let loop ((prev-responses #()))
      (newline)
      (print '**) ; доктор ждёт ввода реплики пациента, приглашением к которому является **
      (let ((user-response (read)))
@@ -99,8 +99,8 @@
           (printf "Goodbye, ~a!\n" name)
           (print '(see you next week))
           (newline))
-         (else (print (reply-v3 user-response prev-responses all-keywords)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
-               (loop (vector-append (vector user-response) prev-responses) all-keywords)
+         (else (print (reply-v3 user-response prev-responses)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
+               (loop (vector-append (vector user-response) prev-responses))
              )
        )
       )
@@ -116,26 +116,24 @@
 )
 
 (define (reply-v2 user-response prev-responses)
-  (case (random 3)
+  (case (random (if (vector-empty? prev-responses) 2 3)
     ((0) (qualifier-answer user-response))
     ((1) (hedge))
-    ; next is reply, not reply-v2 to exclude history-answer variant
-    ; it is possible just repeat random call while not history-answer is chosen, but current variant is faster
-    ((2) (if (vector-empty? prev-responses) (reply user-response) (history-answer prev-responses)))
+    ((2) (history-answer prev-responses))
+    )
     )
   )
 
-(define (reply-v3 user-response prev-responses all-keywords)
+(define (reply-v3 user-response prev-responses)
   (case (random 4)
-        ((0) (qualifier-answer user-response))
+    ((0) (qualifier-answer user-response))
     ((1) (hedge))
-    ; next is reply, not reply-v2 to exclude history-answer variant
-    ; it is possible just repeat random call while not history-answer is chosen, but current variant is faster
-    ((2) (if (vector-empty? prev-responses) (reply user-response) (history-answer prev-responses)))
+    ((2) (if (vector-empty? prev-responses) (hedge) (history-answer prev-responses)))
     ((3)
-     (if (check-for-keywords user-response all-keywords) (answer-by-keyword user-response all-keywords) (reply-v2 user-response prev-responses)))
+     (if (check-for-keywords user-response) (answer-by-keyword user-response) (hedge)))
     )
   )
+
 ; 1й способ генерации ответной реплики -- замена лица в реплике пользователя и приписывание к результату нового начала
 (define (qualifier-answer user-response)
         (append (pick-random-vector '#((you seem to think that)
@@ -197,7 +195,7 @@
 (define (many-replace-v2 replacement-pairs lst)
   (let loop ((result `()) (others lst))
              (if (null? others)
-                    result
+                    (reverse result)
                     (let ((pat-rep (assoc (car others) replacement-pairs)))
                       (loop (cons (if pat-rep (cadr pat-rep) (car others)) result) (cdr others))
                       )
@@ -230,10 +228,12 @@
 ; block 2 ex 6 answer by keywords
 (define keywords_structure '#(
   ( ; начало данных 1й группы
-    (depressed suicide exams university) ; список ключевых слов 1й группы
+    (depressed suicide exams university nightmare starving) ; список ключевых слов 1й группы
     ( ; список шаблонов для составления ответных реплик 1й группы 
 	  (when you feel depressed, go out for ice cream)
           (depression is a disease that can be treated)
+          (you are important, you should remember it)
+          (does your family know about it?)
 	)
   ) ; завершение данных 1й группы
   ( ; начало данных 2й группы ...
@@ -242,20 +242,26 @@
 	  (tell me more about your * )
           (i want to know all about your *)
           (why do you feel that way about your * ?)
+          (your family is important, but also is you)
+          (how old is your * ?)
 	)
   )
   (
-    (university scheme lections seminars lectors students tasks)
+    (university scheme lectures lecture seminars lectors students tasks nightmare)
 	(
 	  (your education is important)
 	  (how many time do you spend to learning ?)
+          (what is the hardest part for you with * ?)
+          (what is your main problem with * ?)
 	)
   )
   (
    (night sleep nightmare bed)
        (
-        (sleep disorder is an important sign, that something is wrong)
+        (sleep disorder is an important sign that something is wrong)
         (how often do you have problems with dreaming?)
+        (did you have the same problems in your childhood ?)
+        (is your bed comfortable enough ?)
         )
   )
   (
@@ -268,17 +274,26 @@
    )
 ))
 
-; one more strategy
-(define (answer-by-keyword phrase all-keywords)
-  ; returns list of all keywords of phrase and its length (length . lst)
-  (define (get-all-keywords)
-    (foldl (lambda (curr res) (if (member curr all-keywords) (cons (+ 1 (car res)) (cons curr (cdr res))) res))
-         (list 0 `()) phrase)
+(define all-keywords
+  (let loop ((result `()) (i (- (vector-length keywords_structure) 1)))
+    (if (< i 0)
+        result
+        (loop (append (car (vector-ref keywords_structure i)) result) (- i 1))
+        )
+    )
   )
 
-  ; gets all answers and their number (from possible) (length. answers)
+; one more strategy
+(define (answer-by-keyword phrase)
+  ; returns list of all keywords of phrase and its length (list length lst)
+  (define get-all-keywords
+    (foldl (lambda (curr res) (if (member curr all-keywords) (cons (+ 1 (car res)) (cons curr (cdr res))) res))
+         (cons 0 `()) phrase)
+    )
+
+  ; gets all answers and their number (from possible) (list length answers)
   (define (get-possible-answers-by-keyword keyword)
-    (let loop ((result (list 0 `())) (i (- (vector-length keywords_structure) 1)))
+    (let loop ((result (cons 0 `())) (i (- (vector-length keywords_structure) 1)))
       (cond ((< i 0) result)
             (else (let ((curr-keywords (car (vector-ref keywords_structure i))) (curr-templates (car (cdr (vector-ref keywords_structure i)))))
                     (cond ((member keyword curr-keywords)
@@ -300,22 +315,15 @@
     (list-ref (cdr length-lst) (random (car length-lst)))
     )
 
-  (define (get-keyword-from-phrase)
-    (pick-random-list (get-all-keywords)))
-  (let get-ans ((keyword (get-keyword-from-phrase)))
+  (define get-keyword-from-phrase
+    (pick-random-list get-all-keywords))
+  
+  (let get-ans ((keyword get-keyword-from-phrase))
     (many-replace-v3 (list (list `* keyword)) (get-answer-by-keyword keyword))
-  )
+    )
   )
 
-(define (check-for-keywords phrase all-keywords)
+(define (check-for-keywords phrase)
   (ormap (lambda (x) (member x all-keywords)) phrase)
-  )
-
-(define (get-all-possible-keywords)
-      (let loop ((result `()) (i (- (vector-length keywords_structure) 1)))
-      (if (< i 0) result
-          (loop (append (car (vector-ref keywords_structure i)) result) (- i 1))
-          )
-        )
   )
    
