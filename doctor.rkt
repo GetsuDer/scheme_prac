@@ -314,11 +314,8 @@
   (define (pick-random-list length-lst)
     (list-ref (cdr length-lst) (random (car length-lst)))
     )
-
-  (define get-keyword-from-phrase
-    (pick-random-list get-all-keywords))
   
-  (let get-ans ((keyword get-keyword-from-phrase))
+  (let get-ans ((keyword (pick-random-list get-all-keywords)))
     (many-replace-v3 (list (list `* keyword)) (get-answer-by-keyword keyword))
     )
   )
