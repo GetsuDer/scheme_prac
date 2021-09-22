@@ -154,18 +154,17 @@
 
     ((lambda (user-response prev-responses) #t)
       2
-      (lambda (user-response prev-responses) ((qualifier-answer user-response)))
+      (lambda (user-response prev-responses) (qualifier-answer user-response))
       )
-
 
     ((lambda (user-response prev-responses) (not (vector-empty? prev-responses)))
       4
-      (lambda (user-response prev-responses) ((history-answer prev-responses)))
+      (lambda (user-response prev-responses) (history-answer prev-responses))
       )
 
     ((lambda (user-response prev-responses) (check-for-keywords user-response))
       6
-      (lambda (user-response prev-responses) (answer-by-keywords user-response))
+      (lambda (user-response prev-responses) (answer-by-keyword user-response))
       )
     )
   )
@@ -211,15 +210,21 @@
 
 ;ex 7
 (define (reply-v4 user-response prev-responses)
+  (define (get-common-strategies-weight strategies)
+    (let loop ((sum 0) (i (- (vector-length  strategies) 1)))
+    (if (< i 0)
+        sum
+        (loop (+ sum (get-strategy-weight (vector-ref strategies i))) (- i 1))
+        )
+      )
+    )
+  
   (define (choose-strategy strategies)
-    (let* (
-           (common_weight (foldl (lambda (x res) (+ res (get-strategy-weight x))) 0 strategies))
-           (rand_ind (random common_weight))
-           )
+    (let ((rand_ind (random (get-common-strategies-weight strategies))))
       (let loop ((more_weight rand_ind) (i 0))
         (let* ((strat (vector-ref strategies i)) (weight (get-strategy-weight strat)))
           (if (< more_weight weight)
-              ((get-strategy-reply-func strat) user-response prev-responses)
+              (get-strategy-reply-func strat)
               (loop (- more_weight weight) (+ i 1))
               )
           )
@@ -228,7 +233,7 @@
     )
   (let* ((good-strategies (vector-filter (lambda (x) ((eval (get-strategy-pred x)) user-response prev-responses)) strategies_structure))
          (curr-strat (choose-strategy good-strategies)))
-    (curr-strat user-response)
+    ((eval curr-strat) user-response prev-responses)
     )
   )
 
