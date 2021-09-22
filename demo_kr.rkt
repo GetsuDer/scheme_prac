@@ -1,0 +1,38 @@
+#lang scheme
+
+(define (taskI lst)
+  (cond ((null? lst) `())
+        (else (caddr (foldl (lambda (cur res) (
+                                        let ((i (car res)) (cur-min (cadr res)) (ans (caddr res)))
+                                         (cond ((null? cur-min) (list (+ i 1) cur (list i)))
+                                               ((< cur cur-min) (list (+ i 1) cur (list i)))
+                                               ((= cur cur-min) (list (+ i 1) cur-min (cons i ans)))
+                                               (else (list (+ i 1) cur-min ans))
+                                               )
+                                         )) (list 0 `() `()) lst)
+                     )
+              )
+        )
+  )
+
+(define (taskII t s)
+  (let loop ((square s) (tree t))
+    (cond ((vector? tree) (+
+                           (loop (/ square 4) (vector-ref tree 0))
+                           (loop (/ square 4) (vector-ref tree 1))
+                           (loop (/ square 4) (vector-ref tree 2))
+                           (loop (/ square 4) (vector-ref tree 3))
+                           ))
+          ((equal? tree 1) square)
+          (else 0)
+          )
+    )
+  )
+
+(define (taskIII lst)
+  (define max-length (foldl (lambda (curr res) (cond ((list? curr)
+                                                  (let ((len (length curr)))
+                                                    (if (> len res) len res)))
+                                                 (else res))) 0 lst))
+  (map (lambda (x) (if (and (list? x) (equal? (length x) max-length)) (map (lambda (y) (+ y 1)) x) x)) lst)
+  )
