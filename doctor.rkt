@@ -53,6 +53,22 @@
     )
   )
 
+; ex 7 (last version of visit-doctor)
+(define (visit-doctor-v4 time-to-goodbye max-workflow)
+  (let loop ((more-clients max-workflow))
+    (
+     cond ((> more-clients 0)
+           (let ask ((curr-name (ask-patient-name)))
+             (cond ((equal? curr-name time-to-goodbye) `(time to go home))
+                (else (printf "Hello, ~a!\n" curr-name)
+                      (print '(what seems to be the trouble?))
+                      (doctor-driver-loop-v4 curr-name)
+                      (loop (- more-clients 1))))))
+          (else `(time to go home))
+          )
+    )
+  )
+                         
 ; цикл диалога Доктора с пациентом
 ; параметр name -- имя пациента
 (define (doctor-driver-loop name)
@@ -107,6 +123,65 @@
     )
   )
 
+; ex 7
+(define (doctor-driver-loop-v4 name)
+  (let loop ((prev-responses #()))
+     (newline)
+     (print '**) ; доктор ждёт ввода реплики пациента, приглашением к которому является **
+     (let ((user-response (read)))
+       (cond
+         ((equal? user-response '(goodbye)) ; реплика '(goodbye) служит для выхода из цикла
+          (printf "Goodbye, ~a!\n" name)
+          (print '(see you next week))
+          (newline))
+         (else (print (reply-v4 user-response prev-responses)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
+               (loop (vector-append (vector user-response) prev-responses))
+             )
+       )
+      )
+    )
+  )
+
+; ex 7
+; strategies description
+; strategy structure: #(pred-func, weight, reply-func)
+(define strategies_structure
+ `#(
+    ((lambda (user-response prev-responses) #t)
+      1
+      (lambda (user-response prev-responses) (hedge))
+      )
+
+    ((lambda (user-response prev-responses) #t)
+      2
+      (lambda (user-response prev-responses) ((qualifier-answer user-response)))
+      )
+
+
+    ((lambda (user-response prev-responses) (not (vector-empty? prev-responses)))
+      4
+      (lambda (user-response prev-responses) ((history-answer prev-responses)))
+      )
+
+    ((lambda (user-response prev-responses) (check-for-keywords user-response))
+      6
+      (lambda (user-response prev-responses) (answer-by-keywords user-response))
+      )
+    )
+  )
+
+(define (get-strategy-pred strat)
+  (car strat)
+  )
+
+(define (get-strategy-weight strat)
+  (cadr strat)
+  )
+
+(define (get-strategy-reply-func strat)
+  (caddr strat)
+  )
+
 ; генерация ответной реплики по user-response -- реплике от пользователя 
 (define (reply user-response)
       (case (random 2) ; с равной вероятностью выбирается один из двух способов построения ответа
@@ -131,6 +206,29 @@
     ((2) (if (vector-empty? prev-responses) (hedge) (history-answer prev-responses)))
     ((3)
      (if (check-for-keywords user-response) (answer-by-keyword user-response) (hedge)))
+    )
+  )
+
+;ex 7
+(define (reply-v4 user-response prev-responses)
+  (define (choose-strategy strategies)
+    (let* (
+           (common_weight (foldl (lambda (x res) (+ res (get-strategy-weight x))) 0 strategies))
+           (rand_ind (random common_weight))
+           )
+      (let loop ((more_weight rand_ind) (i 0))
+        (let* ((strat (vector-ref strategies i)) (weight (get-strategy-weight strat)))
+          (if (< more_weight weight)
+              ((get-strategy-reply-func strat) user-response prev-responses)
+              (loop (- more_weight weight) (+ i 1))
+              )
+          )
+        )
+      )
+    )
+  (let* ((good-strategies (vector-filter (lambda (x) ((eval (get-strategy-pred x)) user-response prev-responses)) strategies_structure))
+         (curr-strat (choose-strategy good-strategies)))
+    (curr-strat user-response)
     )
   )
 
