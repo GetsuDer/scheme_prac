@@ -124,51 +124,38 @@
   )
 
 ; ex 7
-(define (doctor-driver-loop-v4 name)
-  (let loop ((prev-responses #()))
-     (newline)
-     (print '**) ; доктор ждёт ввода реплики пациента, приглашением к которому является **
-     (let ((user-response (read)))
-       (cond
-         ((equal? user-response '(goodbye)) ; реплика '(goodbye) служит для выхода из цикла
-          (printf "Goodbye, ~a!\n" name)
-          (print '(see you next week))
-          (newline))
-         (else (print (reply-v4 user-response prev-responses)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
-               (loop (vector-append (vector user-response) prev-responses))
-             )
-       )
-      )
-    )
-  )
-
-; ex 7
 ; strategies description
 ; strategy structure: #(pred-func, weight, reply-func)
+
+(define (create-strat pred-func weight reply-func)
+  (list pred-func weight reply-func))
+
+(define (add-strat strat strat-struct)
+  (vector-append (vector strat) strat-struct))
+
 (define strategies_structure
- `#(
-    ((lambda (user-response prev-responses) #t)
-      1
-      (lambda (user-response prev-responses) (hedge))
-      )
-
-    ((lambda (user-response prev-responses) #t)
-      2
-      (lambda (user-response prev-responses) (qualifier-answer user-response))
-      )
-
-    ((lambda (user-response prev-responses) (not (vector-empty? prev-responses)))
-      4
-      (lambda (user-response prev-responses) (history-answer prev-responses))
-      )
-
-    ((lambda (user-response prev-responses) (check-for-keywords user-response))
-      6
-      (lambda (user-response prev-responses) (answer-by-keyword user-response))
-      )
-    )
+  (add-strat (create-strat (lambda (user-response prev-responses) #t)
+                         1
+                         (lambda (user-response prev-responses) (hedge))
+                         )
+             (add-strat (create-strat (lambda (user-response prev-responses) #t)
+                         2
+                         (lambda (user-response prev-responses) (qualifier-answer user-response))
+                         )
+                        (add-strat (create-strat (lambda (user-response prev-responses) (not (vector-empty? prev-responses)))
+                                                 4
+                                                 (lambda (user-response prev-responses) (history-answer prev-responses))
+                                                 )
+                                   (add-strat (create-strat (lambda (user-response prev-responses) (check-for-keywords user-response))
+                                                            6
+                                                            (lambda (user-response prev-responses) (answer-by-keyword user-response))
+                                                            )
+                                              #()
+                                              )
+                                   )
+                        )
+             )
   )
-
 (define (get-strategy-pred strat)
   (car strat)
   )
@@ -180,6 +167,25 @@
 (define (get-strategy-reply-func strat)
   (caddr strat)
   )
+; ex 7
+(define (doctor-driver-loop-v4 name)
+  (let loop ((prev-responses #()))
+     (newline)
+     (print '**) ; доктор ждёт ввода реплики пациента, приглашением к которому является **
+     (let ((user-response (read)))
+       (cond
+         ((equal? user-response '(goodbye)) ; реплика '(goodbye) служит для выхода из цикла
+          (printf "Goodbye, ~a!\n" name)
+          (print '(see you next week))
+          (newline))
+         (else (print (reply-v4 user-response prev-responses strategies_structure)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
+               (loop (vector-append (vector user-response) prev-responses))
+             )
+       )
+      )
+    )
+  )
+
 
 ; генерация ответной реплики по user-response -- реплике от пользователя 
 (define (reply user-response)
@@ -209,7 +215,7 @@
   )
 
 ;ex 7
-(define (reply-v4 user-response prev-responses)
+(define (reply-v4 user-response prev-responses all-strats)
   (define (get-common-strategies-weight strategies)
     (let loop ((sum 0) (i (- (vector-length  strategies) 1)))
     (if (< i 0)
@@ -231,7 +237,7 @@
         )
       )
     )
-  (let* ((good-strategies (vector-filter (lambda (x) ((eval (get-strategy-pred x)) user-response prev-responses)) strategies_structure))
+  (let* ((good-strategies (vector-filter (lambda (x) ((eval (get-strategy-pred x)) user-response prev-responses)) all-strats))
          (curr-strat (choose-strategy good-strategies)))
     ((eval curr-strat) user-response prev-responses)
     )
