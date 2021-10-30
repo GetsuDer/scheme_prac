@@ -1,11 +1,73 @@
-; "Доктор". Осень 2021
+; "Весна". Осень 2021
 #lang scheme
-; В учебных целях используется базовая версия Scheme
 
 (require racket/vector)
 ; подключаем функции для работы с векторами
  
 
+; На вход в качестве реплики пациента принимается строка.
+; Затем строка разбивается на предложения по точкам,
+; а предложения - на слова по пробелам (+ отделяются запятые).
+; То есть внутренним представлением реплики пользователя является список предложений, а предложения являются списками слов.
+; Формат ввода - из знаков препинания поддерживаются только запятые
+; Точка должна сигнализировать конец предложения, последняя точка может быть опущена.
+(define (text-to-inner text)
+  (define len (string-length text))
+  (let loop ((i 0) (res `()) (last_sentence `()) (last_word ""))
+    (cond ((= len i) ; реплика закончилась
+           (reverse ; чтобы предложения были в исходном порядке
+            (if (not (eq? "" last_word)) ; предложение оборвалось, кончилось не точкой
+                (cons
+                 (reverse (cons last_word last_sentence))
+                 res)
+                (if (null? last_sentence)
+                    res
+                    (cons last_sentence res)
+                    )
+                )
+            )
+           )
+          ((eq? (string-ref text i) #\space) ; кончилось слово
+           (loop
+            (+ i 1) ; следующая буква
+            res ; без обновления предложений
+            (if (eq? last_word "") ; множественные пробелы
+                last_sentence
+                (cons last_word last_sentence)) ; иначе добавить прочтенное слово к последнему предложению
+            "") ; новое слово
+           )
+          ((eq? (string-ref text i) #\.) ; кончилось предложение и, возможно, слово
+           (loop
+            (+ i 1)
+            (if (eq? last_word "") ; многоточие?
+                (cons (reverse (cons "." last_sentence)) res)
+                (cons (reverse (cons "." (cons last_word last_sentence))) res))
+            `() ; новое предложение начинается
+            "" ; новое слово начинается
+            )
+           )
+          ((eq? (string-ref text i) #\,) ; запятая
+           ; закончить последнее собранное слово, добавить его и запятую
+           (loop
+            (+ i 1) ; следующая буква
+            res ; без одновления предложений
+            (if (eq? "" last_word)
+                (cons "," last_sentence) ; мусорная или отделенная пробелом запятая
+                (cons "," (cons last_word last_sentence))) ; отделить последнее слово, добавить его и запятую
+            "")                
+           )
+          (else ; просто буква
+           (loop
+            (+ i 1)
+            res
+            last_sentence
+            (string-append last_word (substring text i (+ i 1)))
+            )
+           )
+          )
+    )
+  )
+   
 ; получить имя пациента, как первое слово из введенной строки
 (define (ask-patient-name)
  (begin
@@ -97,8 +159,7 @@
     )
   )
 
-
-;Выбор случайно стратегии с учетом веса и применимости
+;Выбор случайной стратегии с учетом веса и применимости
 (define (reply user-response prev-responses all-strats)
   (define (get-common-strategies-weight strategies)
     (let loop ((sum 0) (i (- (vector-length  strategies) 1)))
@@ -155,18 +216,18 @@
                         (me you)
                         (mine yours)
                         (my your)
-						(myself yourself)
+                        (myself yourself)
                         (you i)
                         (your my)
                         (yours mine)
-						(yourself myself)
-						(we you)
-						(us you)
-						(our your)
-						(ours yours)
-						(ourselves yourselves)
-						(yourselves ourselves)
-						(shall will))
+                        (yourself myself)
+                        (we you)
+                        (us you)
+                        (our your)
+                        (ours yours)
+                        (ourselves yourselves)
+                        (yourselves ourselves)
+                        (shall will))
                       phrase)
  )
   
@@ -187,25 +248,28 @@
          )
 )
 
-;block 1 ex 4 3rd way to generate an answer - remember one of the previous user responses
+; 3й способ генерации ответной реплики -- цитата одного из предыдущих предложений
 (define (history-answer prev-responses)
   (append `(earlier you said that) (change-person (pick-random-vector prev-responses)))
   )
 
-; block 2 ex 6 answer by keywords
+
+; 4й способ генерации ответной реплики -- случайный выбор фразы из одного из заготовленных наборов,
+; в соответствии с наличием в реплике пользователя ключевых слов
+; Структура для работы с ключевыми словами
 (define keywords_structure '#(
   ( ; начало данных 1й группы
-    (depressed suicide exams university nightmare starving) ; список ключевых слов 1й группы
-    ( ; список шаблонов для составления ответных реплик 1й группы 
+    (depressed suicide exams university nightmare starving) ; список ключевых слов
+    ( ; список шаблонов для составления ответных реплик
 	  (when you feel depressed, go out for ice cream)
           (depression is a disease that can be treated)
           (you are important, you should remember it)
           (does your family know about it?)
 	)
-  ) ; завершение данных 1й группы
-  ( ; начало данных 2й группы ...
-    (mother father parents brother sister uncle ant grandma grandpa son daughter)
-    (
+  )
+  (
+    (mother father parents brother sister uncle ant grandma grandpa son daughter) ; список ключевых слов
+    ( ; список шаблонов для составления ответных реплик
 	  (tell me more about your * )
           (i want to know all about your *)
           (why do you feel that way about your * ?)
@@ -214,8 +278,8 @@
 	)
   )
   (
-    (university scheme lectures lecture seminars lectors students tasks nightmare)
-	(
+    (university scheme lectures lecture seminars lectors students tasks nightmare) ; список ключевых слов
+	( ; список шаблонов для составления ответных реплик
 	  (your education is important)
 	  (how many time do you spend to learning ?)
           (what is the hardest part for you with * ?)
@@ -224,16 +288,16 @@
   )
   (
    (night sleep nightmare bed)
-       (
-        (sleep disorder is an important sign that something is wrong)
+       ( ; список шаблонов для составления ответных реплик
+        (sleep disorder is an important sign that something is wrong) ; список ключевых слов
         (how often do you have problems with dreaming?)
         (did you have the same problems in your childhood ?)
         (is your bed comfortable enough ?)
         )
   )
   (
-   (food breakfast lunch dinner starving vomiting nausea)
-   (
+   (food breakfast lunch dinner starving vomiting nausea) ; список ключевых слов
+   ( ; список шаблонов для составления ответных реплик
     (you should eat properly to be a healty person)
     (how often do you have problems with eating?)
     (does anybody else know about that?)
@@ -241,6 +305,7 @@
    )
 ))
 
+; Общий список ключевых слов (для проверки их наличия в фразе), с повторами
 (define all-keywords
   (let loop ((result `()) (i (- (vector-length keywords_structure) 1)))
     (if (< i 0)
@@ -250,15 +315,15 @@
     )
   )
 
-; one more strategy
+; Сама стратегия
 (define (answer-by-keyword phrase)
-  ; returns list of all keywords of phrase and its length (list length lst)
+  ; Вычленить из фразы список всех ключевых слов
   (define get-all-keywords
     (foldl (lambda (curr res) (if (member curr all-keywords) (cons (+ 1 (car res)) (cons curr (cdr res))) res))
          (cons 0 `()) phrase)
     )
 
-  ; gets all answers and their number (from possible) (list length answers)
+  ; По данному ключевому слову получить список всех возможных ответов
   (define (get-possible-answers-by-keyword keyword)
     (let loop ((result (cons 0 `())) (i (- (vector-length keywords_structure) 1)))
       (cond ((< i 0) result)
@@ -273,20 +338,23 @@
       )
     )
 
-  ; gets random answer from all possible
+  ; Выбрать случайный ответ
   (define (get-answer-by-keyword keyword)
     (pick-random-list (get-possible-answers-by-keyword keyword))
     )
 
+  ; Выбрать случайный элемент списка
   (define (pick-random-list length-lst)
     (list-ref (cdr length-lst) (random (car length-lst)))
     )
-  
+
+  ; Применить стратегию
   (let get-ans ((keyword (pick-random-list get-all-keywords)))
     (many-replace (list (list `* keyword)) (get-answer-by-keyword keyword))
     )
   )
 
+; Проверить наличие в реплике пользователя ключевых слов
 (define (check-for-keywords phrase)
   (ormap (lambda (x) (member x all-keywords)) phrase)
   )
