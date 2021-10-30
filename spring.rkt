@@ -27,7 +27,7 @@
                 )
             )
            )
-          ((eq? (string-ref text i) #\space) ; кончилось слово
+          ((char-whitespace? (string-ref text i)) ; кончилось слово
            (loop
             (+ i 1) ; следующая буква
             res ; без обновления предложений
@@ -64,12 +64,23 @@
                 (cons (substring text i (+ i 1)) (cons last_word last_sentence))) ; отделить последнее слово, добавить его и запятую
             "")                
            )
-          (else ; просто буква
+          ((or (char-alphabetic? (string-ref text i))
+               (and (char<=? #\0 (string-ref text i))
+                    (char<=? (string-ref text i) #\9))) ; просто буква или цифра
            (loop
             (+ i 1)
             res
             last_sentence
-            (string-append last_word (substring text i (+ i 1)))
+            (string-append last_word (if (and (eq? "" last_word) (null? last_sentence))
+                                         (string (char-upcase (string-ref text i)))
+                                         (string (char-downcase (string-ref text i)))))
+            )
+           )
+          (else ; какой-то некорректный символ (ну или нереализованный)
+           (loop ; просто пропустим
+            (+ i 1)
+            res last_sentence
+            last_word
             )
            )
           )
@@ -89,26 +100,46 @@
   )
    
 ; получить имя пациента, как первое слово из введенной строки
+; если получечное представление пусто, спрашивать, пока не ответят корректно
 (define (ask-patient-name)
  (begin
-  (println "next!")
-  (println "who are you?")
+  (printf "Next!\n")
+  (printf "Who are you?\n")
   (print '**)
-  (caar (text-to-inner (read-line))) ; первое слово первого предложения - имя пациента
- ) 
-)
+  (let loop ((in (text-to-inner (read-line))))
+    (cond ((null? in) (printf "Please, introduce yourself\n**") (loop (text-to-inner (read-line))))
+          (else (caar in) ; первое слово первого предложения - имя пациента
+        )
+          )
+    )
+  )
+  )
 
 ; функция для запуска доктора
 ; параметры - слово, являющееся триггером конца работы,
 ; и максимальное число пациентов для приема 
-(define (visit-doctor time-to-goodbye max-workflow)
+(define (visit-doctor time-to-goodbye_in max-workflow)
+  (define time-to-goodbye
+    (let loop ((i 0) (res ""))
+      (if (= i (string-length time-to-goodbye_in))
+          res
+          (loop
+           (+ i 1)
+           (string-append res (string (if (= i 0)
+                                          (char-upcase (string-ref time-to-goodbye_in 0))
+                                          (char-downcase (string-ref time-to-goodbye_in i)))))
+           )
+          )
+      )
+    )
   (let loop ((more-clients max-workflow))
     (
      cond ((> more-clients 0)
            (let ask ((curr-name (ask-patient-name)))
-             (cond ((equal? curr-name time-to-goodbye) (printf "Time to go home\n"))
-                (else (printf "Hello, ~a!\n" curr-name)
-                      (print "what seems to be the trouble?")
+             (cond
+               ((equal? curr-name time-to-goodbye) (printf "Time to go home\n"))
+               (else (printf "Hello, ~a!\n" curr-name)
+                      (printf "What seems to be the trouble?\n")
                       (doctor-driver-loop curr-name)
                       (loop (- more-clients 1))))))
           (else (printf "Time to go home\n"))
@@ -165,15 +196,15 @@
 ; ex 7
 (define (doctor-driver-loop name)
   (let loop ((prev-responses #()))
-     (newline)
      (print '**) ; доктор ждёт ввода реплики пациента, приглашением к которому является **
      (let ((user-response (text-to-inner (read-line))))
        (cond
-         ((equal? (caar user-response) "goodbye") ; реплика, начинающаяся с goodbye, служит для выхода из цикла
+         ((null? user-response) (printf "I will wait for your answer.\n") (loop prev-responses))
+         ((equal? (caar user-response) "Goodbye") ; реплика, начинающаяся с goodbye, служит для выхода из цикла
           (printf "Goodbye, ~a!\n" name)
           (printf "See you next week.\n")
          )
-         (else (print (reply user-response prev-responses strategies_structure)) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
+         (else (printf (string-append (reply user-response prev-responses strategies_structure) "\n")) ; иначе Доктор генерирует ответ, печатает его и продолжает цикл
                (loop (vector-append (list->vector user-response) prev-responses)) ; добавить предложения из реплики пациента в архив реплик
              )
        )
@@ -212,19 +243,22 @@
 
 ; 1й способ генерации ответной реплики -- замена лица в реплике пользователя и приписывание к результату нового начала
 (define (qualifier-answer user-response)
-        (string-append (pick-random-vector '#("you seem to think that "
-                                       "you feel that "
-                                       "why do you believe that "
-                                       "why do you say that "
-                                       "you said that "
-                                       "you are sure that "
-                                       "does you parents know that "
+  (let ((prev_ans (sentence-to-text (change-person (list-ref user-response (random (length user-response)))))))
+    (string-append (pick-random-vector '#("You seem to think that "
+                                       "You feel that "
+                                       "Why do you believe that "
+                                       "Why do you say that "
+                                       "You said that "
+                                       "You are sure that "
+                                       "Does you parents know that "
                                        )
-                )
-                (sentence-to-text (change-person (list-ref user-response (random (length user-response))))) ; из реплики пользователя
+                                       )
+                   (string-append (string (char-downcase (string-ref prev_ans 0))) (substring prev_ans 1))
+                 ; из реплики пользователя
                 ; выбирается случайное предложение
         )
- )
+    )
+  )
 
 ; случайный выбор одного из элементов вектора vctr
 (define (pick-random-vector vctr)
@@ -233,24 +267,25 @@
 
 ; замена лица во фразе			
 (define (change-person phrase)
-        (many-replace '(("am" "are")
-                        ("are" "am")
-                        ("i" "you")
-                        ("me" "you")
-                        ("mine" "yours")
-                        ("my" "your")
-                        ("myself" "yourself")
-                        ("you" "i")
-                        ("your" "my")
-                        ("yours" "mine")
-                        ("yourself" "myself")
-                        ("we" "you")
-                        ("us" "you")
-                        ("our" "your")
-                        ("ours" "yours")
-                        ("ourselves" "yourselves")
-                        ("yourselves" "ourselves")
-                        ("shall" "will"))
+        (many-replace '(("am" "are") ("Am" "Are")
+                        ("are" "am") ("Are" "Am")
+                        ("i" "you") ("I" "You")
+                        ("me" "you") ("Me" "You")
+                        ("mine" "yours") ("Mine" "Yours")
+                        ("my" "your") ("My" "Your")
+                        ("myself" "yourself") ("Myself" "Yourself")
+                        ("you" "i") ("You" "I")
+                        ("your" "my") ("Your" "My")
+                        ("yours" "mine") ("Yours" "Mine")
+                        ("yourself" "myself") ("Yourself" "Myself")
+                        ("we" "you") ("We" "You")
+                        ("us" "you") ("Us" "You")
+                        ("our" "your") ("Our" "Your")
+                        ("ours" "yours") ("Ours" "Yours")
+                        ("ourselves" "yourselves") ("Ourselves" "Yourselves")
+                        ("yourselves" "ourselves") ("Yourselves" "Ourselves")
+                        ("shall" "will") ("Shall" "Will")
+                        )
                       phrase)
  )
   
@@ -273,7 +308,11 @@
 
 ; 3й способ генерации ответной реплики -- цитата одного из предыдущих предложений
 (define (history-answer prev-responses)
-  (string-append "earlier you said that " (sentence-to-text (change-person (pick-random-vector prev-responses))))
+  (let ((prev_ans (sentence-to-text (change-person (pick-random-vector prev-responses)))))
+  (string-append "earlier you said that "
+                 (string-append (string (char-downcase (string-ref prev_ans 0))) (substring prev_ans 1))
+                 )
+    )
   )
 
 
