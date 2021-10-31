@@ -223,6 +223,13 @@
     )
   )
 
+(define (direct-gen text)
+  "direct gen not defined yet"
+  )
+
+(define (mixed-gen text)
+  "mixed-gen not defined yet"
+  )
 ; получить имя пациента, как первое слово из введенной строки
 ; если получечное представление пусто, спрашивать, пока не ответят корректно
 (define (ask-patient-name)
@@ -270,40 +277,41 @@
           )
     )
   )
-  
-; ex 7
+
 ; strategies description
 ; strategy structure: `(pred-func, weight, reply-func)
 
 (define (create-strat pred-func weight reply-func)
   (list pred-func weight reply-func))
 
-(define (add-strat strat strat-struct)
-  (vector-append (vector strat) strat-struct))
-
 (define strategies_structure
-  (add-strat (create-strat (lambda (user-response prev-responses) #t) ; ответ не связан с репликой, возможен всегда
+  (vector-append (vector (create-strat (lambda (user-response prev-responses) #t) ; ответ не связан с репликой, возможен всегда
                          1
                          (lambda (user-response prev-responses) (hedge))
-                         )
-             (add-strat (create-strat (lambda (user-response prev-responses) #t) ; ответ возможен для любой реплики, то есть всегда
+                         ))
+                 (vector (create-strat (lambda (user-response prev-responses) #t) ; ответ возможен для любой реплики, то есть всегда
                          2
                          (lambda (user-response prev-responses) (qualifier-answer user-response))
-                         )
-                        (add-strat (create-strat (lambda (user-response prev-responses) (not (vector-empty? prev-responses))) ; нужен непустой вектор предыдущих реплик
-                                                 4
-                                                 (lambda (user-response prev-responses) (history-answer prev-responses))
-                                                 )
-                                   (add-strat (create-strat (lambda (user-response prev-responses) (check-for-keywords user-response)) ; проверяет все предложения
-                                                            6
-                                                            (lambda (user-response prev-responses) (answer-by-keyword user-response)) ; выделяет все ключевые слова (из всех предложений)
-                                                            )
-                                              #()
-                                              )
-                                   )
-                        )
-             )
+                         ))
+                 (vector (create-strat (lambda (user-response prev-responses) (not (vector-empty? prev-responses))) ; нужен непустой вектор предыдущих реплик
+                         4
+                         (lambda (user-response prev-responses) (history-answer prev-responses))
+                         ))
+                 (vector (create-strat (lambda (user-response prev-responses) (check-for-keywords user-response)) ; проверяет все предложения
+                         6
+                         (lambda (user-response prev-responses) (answer-by-keyword user-response)) ; выделяет все ключевые слова (из всех предложений)
+                         ))
+                 (vector (create-strat (lambda (user-response prev-responses) #t)
+                         10
+                         (lambda (user-response prev-responses) (direct-gen user-response))
+                         ))
+                 (vector (create-strat (lambda (user-response prev-responses) #t)
+                         10
+                         (lambda (user-response prev-responses) (mixed-gen user-response))
+                         ))
+                 )
   )
+ 
 (define (get-strategy-pred strat)
   (car strat)
   )
