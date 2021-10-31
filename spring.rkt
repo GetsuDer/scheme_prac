@@ -3,8 +3,7 @@
 
 (require racket/vector)
 ; подключаем функции для работы с векторами
- 
-(define test-text "Это длинный текст, в котором много знаков препинания - точки, запятые и тд. Тут есть предложения, оканчивающиеся так! И так? Ну - вот : еще могу так;")
+
 ; На вход в качестве реплики пациента принимается строка.
 ; Затем строка разбивается на предложения по точкам,
 ; а предложения - на слова по пробелам (+ отделяются запятые).
@@ -98,7 +97,132 @@
         )
     )
   )
-   
+
+; Конкретное значение N
+(define N 3)
+
+; Информация о N-граммах будет храниться в hash-table info
+(define info
+  (make-hash))
+
+; записать обработанные данные о N-граммах в файл name
+; формат записи: ключ \n число значений \n *число значений раз* слово \n число употреблений 
+(define (dump-info name)
+  (let ((out (open-output-file name #:mode `text #:exists `replace)))
+    (hash-for-each info (lambda (key value)
+                          (begin
+                            (fprintf out "~a~n" key)
+                            (fprintf out "~a~n" (length value))
+                            (let loop ((rest value))
+                              (cond ((not (null? rest))
+                                     (fprintf out "~a~n" (caar rest))
+                                     (fprintf out "~a~n" (cdar rest))
+                                     (loop (cdr rest))
+                                     )
+                                    )
+                              )
+                            )
+                          )
+                   )
+    (close-output-port out)
+    )
+  )
+
+; прочитать обработанные данные из файла dumpname
+; формат записи: ключ \n число значений \n *число значений раз* слово \n число употреблений
+(define (read-info-from-dump dumpname)
+  (let ((in (open-input-file dumpname #:mode `text)))
+    (let loop1 ((line (read-line in)))
+      (cond ((not (eof-object? line))
+             (let ((key line) (val-num (string->number (read-line in))))
+               (let loop2 ((i val-num) (res `()))
+                 (cond ((= i 0) (hash-set! info key res))
+                       (else
+                        (loop2 (- i 1) (cons (cons (read-line in) (string->number (read-line in))) res))
+                        )
+                       )
+                 )
+               )
+             (loop1 (read-line in))
+             )
+            )
+      )
+    (close-input-port in)
+    )
+  )
+
+; Соединить первые n элементов списка (строк) в одну строку, переведя в нижний регистр
+; Проверка длины списка лежит на вызывающей функции
+(define (join-list-n lst n)
+  (let loop ((res "") (more n) (rest lst))
+    (cond ((= 0 more) (string-downcase res))
+          (else (loop (string-append (if (eq? res "") res (string-append res " ")) (car rest)) (- more 1) (cdr rest)))
+          )
+    )
+  )
+
+; Если val присутствует в первых элементов пар списка lst, увеличить соответствующий счетчик.
+; Иначе - добавить пару (val, 1)
+(define (update-hash-list lst val)
+  (let loop ((rest lst) (res `()) (contains #f))
+    (cond ((null? rest) (if contains res (cons (cons val 1) res)))
+          (else
+           (cond ((string=? (caar rest) val)
+                  (loop
+                   (cdr rest)
+                   (cons (cons val (+ 1 (cdar rest))) res) ; элемент найден
+                   #t
+                   ))
+                 (else
+                  (loop
+                   (cdr rest)
+                   (cons (car rest) res)
+                   contains
+                   ))
+               )
+           )
+          )
+    )
+)
+
+; Выделить из текста во внутреннем представлении text N-граммы и дополнить таблицу info
+(define (process-text text)
+  (let loop1 ((rest-text text)) ; по каждому предложению в тексте
+    (cond ((not (null? rest-text))
+           (let loop2 ((rest-sentence (car rest-text)) (rest-len (length (car rest-text)))) ; по каждому слову предложения
+             (cond ((not (< rest-len N)) ; если от текущего слова можно построить N-грамму
+                    (let ((key (join-list-n rest-sentence (- N 1))) (val (list-ref rest-sentence (- N 1))))
+                      (if (hash-has-key? info key)
+                          (let ((oldval (hash-ref info key)))
+                            (hash-set! info key (update-hash-list oldval val))
+                            )
+                          (hash-set! info key (list (cons val 1)))
+                          )
+                      )
+                    (loop2 (cdr rest-sentence) (- rest-len 1))
+                    )
+                   )
+             )
+           (loop1 (cdr rest-text))
+           )
+          )
+    )
+  )
+
+; Считать текст из файла, перевести во внутреннее представление и вызвать process-text
+(define (process-file filename)
+  (let loop ((in (open-input-file filename #:mode `text)))
+    (let ((line (read-line in)))
+      (cond ((not (eof-object? line))
+             (process-text (text-to-inner line))
+             (loop in)
+             )
+            )
+      )
+    (close-input-port in)
+    )
+  )
+
 ; получить имя пациента, как первое слово из введенной строки
 ; если получечное представление пусто, спрашивать, пока не ответят корректно
 (define (ask-patient-name)
