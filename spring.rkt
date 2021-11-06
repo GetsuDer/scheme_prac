@@ -99,17 +99,20 @@
   )
 
 ; Конкретное значение N
-(define N 3)
+(define N 2)
 
-; Информация о N-граммах будет храниться в hash-table info
-(define info
+; Информация о N-граммах будет храниться в hash-table info_ahead и info_back
+; (соответственно, вероятные последователи и предшественники N-грамм)
+(define info_ahead
+  (make-hash))
+(define info_back
   (make-hash))
 
 ; записать обработанные данные о N-граммах в файл name
 ; формат записи: ключ \n число значений \n *число значений раз* слово \n число употреблений 
-(define (dump-info name)
+(define (dump-info hash-table name)
   (let ((out (open-output-file name #:mode `text #:exists `replace)))
-    (hash-for-each info (lambda (key value)
+    (hash-for-each hash-table (lambda (key value)
                           (begin
                             (fprintf out "~a~n" key)
                             (fprintf out "~a~n" (length value))
@@ -128,15 +131,15 @@
     )
   )
 
-; прочитать обработанные данные из файла dumpname
+; прочитать обработанные данные из файла dumpname в таблицу hash-table
 ; формат записи: ключ \n число значений \n *число значений раз* слово \n число употреблений
-(define (read-info-from-dump dumpname)
+(define (read-info-from-dump hash-table dumpname)
   (let ((in (open-input-file dumpname #:mode `text)))
     (let loop1 ((line (read-line in)))
       (cond ((not (eof-object? line))
              (let ((key line) (val-num (string->number (read-line in))))
                (let loop2 ((i val-num) (res `()))
-                 (cond ((= i 0) (hash-set! info key res))
+                 (cond ((= i 0) (hash-set! hash-table key res))
                        (else
                         (loop2 (- i 1) (cons (cons (read-line in) (string->number (read-line in))) res))
                         )
@@ -185,24 +188,40 @@
     )
 )
 
-; Выделить из текста во внутреннем представлении text N-граммы и дополнить таблицу info
+; Выделить из текста во внутреннем представлении text N-граммы и дополнить таблицы info_ahead и info_back
 (define (process-text text)
   (let loop1 ((rest-text text)) ; по каждому предложению в тексте
     (cond ((not (null? rest-text))
+           ; заполнение info_ahead (вперед)
            (let loop2 ((rest-sentence (car rest-text)) (rest-len (length (car rest-text)))) ; по каждому слову предложения
              (cond ((not (< rest-len N)) ; если от текущего слова можно построить N-грамму
                     (let ((key (join-list-n rest-sentence (- N 1))) (val (list-ref rest-sentence (- N 1))))
-                      (if (hash-has-key? info key)
-                          (let ((oldval (hash-ref info key)))
-                            (hash-set! info key (update-hash-list oldval val))
+                      (if (hash-has-key? info_ahead key)
+                          (let ((oldval (hash-ref info_ahead key)))
+                            (hash-set! info_ahead key (update-hash-list oldval val))
                             )
-                          (hash-set! info key (list (cons val 1)))
+                          (hash-set! info_ahead key (list (cons val 1)))
                           )
                       )
                     (loop2 (cdr rest-sentence) (- rest-len 1))
                     )
                    )
              )
+           ; заполнение info_back (назад)
+           (let loop3 ((rest-sentence (cons "." (car rest-text))) (rest-len (+ 1 (length (car rest-text)))))
+             (cond ((not (< rest-len N))
+                     (let ((key (join-list-n (cdr rest-sentence) (- N 1))) (val (car rest-sentence)))
+                       (if (hash-has-key? info_back key)
+                           (let ((oldval (hash-ref info_back key)))
+                             (hash-set! info_back key (update-hash-list oldval val))
+                             )
+                           (hash-set! info_back key (list (cons val 1)))
+                           )
+                       )
+                     (loop3 (cdr rest-sentence) (- rest-len 1))
+                     )
+                    )
+              )
            (loop1 (cdr rest-text))
            )
           )
@@ -222,13 +241,176 @@
     (close-input-port in)
     )
   )
+; добавить элемент в конец списка
+(define (add-into-end lst val)
+  (let loop ((res `()) (rest lst))
+    (cond ((null? rest) (list val))
+          (else
+           (cons (car rest) (loop res (cdr rest)))
+           )
+          )
+    )
+  )
 
+; Выбрать элемент из списка с весами
+(define (choose-with-weight lst)
+  (cond ((null? lst) null)
+        (else
+         (let* ((weight (let loop1 ((rest lst) (res 0))
+                       (if (null? rest)
+                           res
+                           (loop1 (cdr rest) (+ res (cdar rest))))))
+             (i (random weight)))
+        (let loop ((more i) (rest lst))
+          (if (> (cdar rest) more)
+              (caar rest)
+              (loop (- more (cdar rest)) (cdr rest)))
+          )
+        )
+      )
+        )
+  )
+
+; проверяет, является ли строка знаком пунктуации, перед которым не надо ставить пробел
+(define (need-space val)
+  (cond ((string=? val ",") #f)
+        (else #t)
+        )
+  )
+
+(define (up-first str)
+  (if (eq? str "")
+      ""
+      (string-append (string-upcase (substring str 0 1)) (substring str 1))
+      )
+  )
+
+; "прямая" генерация
 (define (direct-gen text)
-  "direct gen not defined yet"
+  (println "directo-gen")
+  (let* ((beginnings (let loop1 ((rest-sentences text) (res `()))
+                      (cond ((null? rest-sentences) res) ; предложения реплики кончились
+                            ((< (length (car rest-sentences)) (- N 1)) (loop1 (cdr rest-sentences) res)) ; не хватает для поиска
+                            (else (let ((key (join-list-n (car rest-sentences) (- N 1))))
+                                    (loop1
+                                     (cdr rest-sentences)
+                                     (if (hash-has-key? info_ahead key)
+                                         (cons (car rest-sentences) res)
+                                         res)
+                                     )
+                                    )
+                                  )
+                            )
+                       )
+                     ) ; возможные начала
+         (sentence (list-ref beginnings (random (length beginnings))))) ; выбранное начало
+    (let loop2 ((res (join-list-n sentence (- N 1))) (key-list (take sentence (- N 1))) (wordlimit 15))
+      (let* ((key (join-list-n key-list (- N 1)))
+             (values (if (hash-has-key? info_ahead key)
+                         (hash-ref info_ahead key)
+                         (list (cons "." 1))))
+             (value (if (= 0 wordlimit) "." (choose-with-weight values))))
+        (if (or (string=? value ".") (string=? value "!") (string=? value "?"))
+            (string-append res value)
+            (loop2 (string-append (if (and (not (eq? res "")) (need-space value))
+                                      (string-append res " ")
+                                      res)
+                                  (if (eq? res "")
+                                      (up-first value)
+                                      value))
+                   (add-into-end key-list value)
+                   (- wordlimit 1))
+            )
+        )
+      )
+    )
+  )
+(define (check-for-begin-part-for-mixed-gen sentence)
+  (let loop ((rest sentence) (rest-len (length sentence)))
+    (cond ((< rest-len (- N 1)) #f) ; нельзя выделить N-1-грамму
+          (else (let ((key (join-list-n rest (- N 1))))
+                  (if (and (hash-has-key? info_ahead key))
+                      #t
+                      (loop (cdr sentence) (- rest-len 1))
+                      )
+                  )
+                )
+          )
+    )
+  )
+
+(define (find-begin-parts-for-mixed-gen sentence)
+  (let loop ((rest sentence) (rest-len (length sentence)) (res `()))
+    (cond ((< rest-len (- N 1)) res) ; нельзя выделить N-1-грамму
+          (else (let ((key (join-list-n rest (- N 1))))
+                  (loop (cdr sentence) (- rest-len 1)
+                        (if (and (hash-has-key? info_ahead key) (hash-has-key? info_back key))
+                            (cons (take rest (- N 1)) res)
+                            res
+                            )
+                        )
+                  )
+                )
+          )
+    )
   )
 
 (define (mixed-gen text)
-  "mixed-gen not defined yet"
+  (println "Mixed gen")
+  (let* ((possible_init_keys (let loop1 ((rest text) (res `()))
+                               (if (null? rest)
+                                   res
+                                   (loop1 (cdr text)
+                                          (append (find-begin-parts-for-mixed-gen (car rest)) res)
+                                          )
+                                   )
+                               ))
+         (init-key (list-ref possible_init_keys (random (length possible_init_keys))))
+         (back-part (let loop-back ((res "") (key-list init-key) (wordlimit 7))
+                      (let* ((key (join-list-n key-list (- N 1)))
+                             (values (if (hash-has-key? info_back key)
+                                         (hash-ref info_back key)
+                                         `()))
+                             (value (if (= 0 wordlimit) null (choose-with-weight values))))
+                        (if (or (null? value)
+                                (string=? value ".")
+                                (string=? value "!")
+                                (string=? value "?"))
+                            ; Конец предложения.
+                            (up-first res)
+                            (loop-back (string-append value
+                                                      (if (and (not (eq? res ""))
+                                                              (need-space (substring res 0 1)))
+                                                          (string-append " " res)
+                                                          res))
+                                       (cons value key-list)
+                                       (- wordlimit 1))
+                            )
+                        )
+                      ))
+         (ahead-part (let loop-ahead ((res "") (key-list init-key) (wordlimit 7))
+                       (let* ((key (join-list-n key-list (- N 1)))
+                              (values (if (hash-has-key? info_ahead key)
+                                          (hash-ref info_ahead key)
+                                          (list (cons "." 1))))
+                              (value (if (= 0 wordlimit) "." (choose-with-weight values))))
+                         (if (or (string=? value ".")
+                                 (string=? value "!")
+                                 (string=? value "?"))
+                             (string-append res value)
+                             (loop-ahead (string-append (if (need-space value)
+                                                            (string-append res " ")
+                                                            res)
+                                                        value)
+                                         (add-into-end key-list value)
+                                         (- wordlimit 1))
+                             )
+                         )
+                       )
+                     )
+         )
+    (string-append back-part (string-append " " (string-append (join-list-n init-key (- N 1)) ahead-part)))
+    )
   )
 ; получить имя пациента, как первое слово из введенной строки
 ; если получечное представление пусто, спрашивать, пока не ответят корректно
@@ -301,11 +483,21 @@
                          6
                          (lambda (user-response prev-responses) (answer-by-keyword user-response)) ; выделяет все ключевые слова (из всех предложений)
                          ))
-                 (vector (create-strat (lambda (user-response prev-responses) #t)
+                 (vector (create-strat (lambda (user-response prev-responses)
+                                         (ormap (lambda (sentence)
+                                                  (and (<= (- N 1) (length sentence))
+                                                       (hash-has-key? info_ahead (join-list-n sentence (- N 1)))))
+                                                user-response))
                          10
                          (lambda (user-response prev-responses) (direct-gen user-response))
                          ))
-                 (vector (create-strat (lambda (user-response prev-responses) #t)
+                 (vector (create-strat (lambda (user-response prev-responses)
+                                         (ormap (lambda (sentence)
+                                                  (check-for-begin-part-for-mixed-gen sentence)
+                                                  )
+                                                user-response
+                                                )
+                                         )
                          10
                          (lambda (user-response prev-responses) (mixed-gen user-response))
                          ))
@@ -324,7 +516,13 @@
   (caddr strat)
   )
 
-
+; слегка заполним таблицу обучения
+;(process-file "hp1.txt")
+;(dump-info info_ahead "dump1_ahead.txt")
+;(dump-info info_back "dump1_back.txt")
+(read-info-from-dump info_ahead "dump1_ahead.txt")
+(read-info-from-dump info_back "dump1_back.txt")
+;(read-info-from-dump info_ahead "dump_all.txt")
 ; ex 7
 (define (doctor-driver-loop name)
   (let loop ((prev-responses #()))
