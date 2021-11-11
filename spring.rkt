@@ -3,6 +3,7 @@
 
 (require racket/vector)
 ; подключаем функции для работы с векторами
+(require racket/set)
 
 ; На вход в качестве реплики пациента принимается строка.
 ; Затем строка разбивается на предложения по точкам,
@@ -70,9 +71,7 @@
             (+ i 1)
             res
             last_sentence
-            (string-append last_word (if (and (eq? "" last_word) (null? last_sentence))
-                                         (string (char-upcase (string-ref text i)))
-                                         (string (char-downcase (string-ref text i)))))
+            (string-append last_word (string (string-ref text i)))
             )
            )
           (else ; какой-то некорректный символ (ну или нереализованный)
@@ -99,7 +98,7 @@
   )
 
 ; Конкретное значение N
-(define N 3)
+(define N 8)
 
 ; Информация о N-граммах будет храниться в hash-table info_ahead и info_back
 ; (соответственно, вероятные последователи и предшественники N-грамм)
@@ -168,7 +167,7 @@
 (define (join-list-n lst n)
   (let loop ((res "") (more n) (rest lst))
     (cond ((= 0 more) (string-downcase res))
-          (else (loop (string-append (if (eq? res "") res (string-append res " ")) (car rest)) (- more 1) (cdr rest)))
+          (else (loop (string-append (if (or (eq? res "") (not (need-space (car rest)))) res (string-append res " ")) (car rest)) (- more 1) (cdr rest)))
           )
     )
   )
@@ -269,12 +268,14 @@
          (let* ((weight (let loop1 ((rest lst) (res 0))
                        (if (null? rest)
                            res
-                           (loop1 (cdr rest) (if (string=? (caar rest) bad-value)
+                           (loop1 (cdr rest) (if (or (string=? (caar rest) bad-value)
+                                                     (and (string=? bad-value ",") (string=? (caar rest) ".")))
                                                  res
                                                  (+ res (cdar rest)))))))
                 (i (random weight)))
            (let loop ((more i) (rest lst))
-             (cond ((string=? (caar rest) bad-value) (loop more (cdr rest)))
+             (cond ((or (string=? (caar rest) bad-value)
+                        (and (string=? bad-value ",") (string=? (caar rest) "."))) (loop more (cdr rest)))
                    ((> (cdar rest) more)
                     (caar rest))
                    (else
@@ -287,7 +288,10 @@
 
 ; проверяет, является ли строка знаком пунктуации, перед которым не надо ставить пробел
 (define (need-space val)
-  (cond ((string=? val ",") #f)
+  (cond ((or (string=? val ",")
+             (string=? val ")")
+             (string=? val ":")
+             (string=? val ";")) #f)
         (else #t)
         )
   )
@@ -313,7 +317,6 @@
 
 ; "прямая" генерация
 (define (direct-gen text)
-  (println "directo-gen")
   (let* ((beginnings (let loop1 ((rest-sentences text) (res `()))
                       (cond ((null? rest-sentences) res) ; предложения реплики кончились
                             ((< (length (car rest-sentences)) (- N 1)) (loop1 (cdr rest-sentences) res)) ; не хватает для поиска
@@ -330,7 +333,7 @@
                        )
                      ) ; возможные начала
          (sentence (list-ref beginnings (random (length beginnings))))) ; выбранное начало
-    (let loop2 ((res (join-list-n sentence (- N 1))) (key-list (take sentence (- N 1))) (wordlimit 15) (prev-value ""))
+    (let loop2 ((res (join-list-n sentence (- N 1))) (key-list (take sentence (- N 1))) (wordlimit 20) (prev-value ""))
       (let* ((key (join-list-n key-list (- N 1)))
              (values (if (hash-has-good-value info_ahead key prev-value)
                          (hash-ref info_ahead key)
@@ -381,7 +384,6 @@
   )
 
 (define (mixed-gen text)
-  (println "Mixed gen")
   (let* ((possible_init_keys (let loop1 ((rest text) (res `()))
                                (if (null? rest)
                                    res
@@ -391,7 +393,7 @@
                                    )
                                ))
          (init-key (list-ref possible_init_keys (random (length possible_init_keys))))
-         (back-part (let loop-back ((res "") (key-list init-key) (wordlimit 7) (prev-value ""))
+         (back-part (let loop-back ((res "") (key-list init-key) (wordlimit 15) (prev-value ""))
                       (let* ((key (join-list-n key-list (- N 1)))
                              (values (if (hash-has-good-value info_back key prev-value)
                                          (hash-ref info_back key)
@@ -402,7 +404,7 @@
                                 (string=? value "!")
                                 (string=? value "?"))
                             ; Конец предложения.
-                            (up-first res)
+                            res
                             (loop-back (string-append value
                                                       (if (and (not (eq? res ""))
                                                               (need-space (substring res 0 1)))
@@ -414,7 +416,7 @@
                             )
                         )
                       ))
-         (ahead-part (let loop-ahead ((res "") (key-list init-key) (wordlimit 7) (prev-value ""))
+         (ahead-part (let loop-ahead ((res "") (key-list init-key) (wordlimit 15) (prev-value ""))
                        (let* ((key (join-list-n key-list (- N 1)))
                               (values (if (hash-has-good-value info_ahead key prev-value)
                                           (hash-ref info_ahead key)
@@ -436,7 +438,12 @@
                        )
                      )
          )
-    (string-append back-part (string-append " " (string-append (join-list-n init-key (- N 1)) ahead-part)))
+    (up-first
+     (string-append back-part (string-append (if (and
+                                                  (need-space (string (string-ref (join-list-n init-key (- N 1)) 0)))
+                                                  (not (string=? back-part ""))) " " "")
+                                             (string-append (join-list-n init-key (- N 1)) ahead-part)))
+     )
     )
   )
 ; получить имя пациента, как первое слово из введенной строки
@@ -515,7 +522,7 @@
                                                   (and (<= (- N 1) (length sentence))
                                                        (hash-has-key? info_ahead (join-list-n sentence (- N 1)))))
                                                 (change-person-text user-response)))
-                         10
+                         20
                          (lambda (user-response prev-responses) (direct-gen (change-person-text user-response)))
                          ))
                  (vector (create-strat (lambda (user-response prev-responses)
@@ -525,7 +532,7 @@
                                                 (change-person-text user-response)
                                                 )
                                          )
-                         10
+                         20
                          (lambda (user-response prev-responses) (mixed-gen (change-person-text user-response)))
                          ))
                  )
@@ -549,12 +556,66 @@
 ;(dump-info info_back "dump1_back.txt")
 ;(read-info-from-dump info_ahead "dump1_ahead.txt")
 ;(read-info-from-dump info_back "dump1_back.txt")
-(read-info-from-dump info_ahead "hp_ahead.txt")
-(read-info-from-dump info_back "hp_back.txt")
-(read-info-from-dump info_ahead "lotr_ahead.txt")
-(read-info-from-dump info_back "lotr_back.txt")
-(read-info-from-dump info_ahead "sh_ahead.txt")
-(read-info-from-dump info_back "sh_back.txt")
+
+;(read-info-from-dump info_ahead "hp_ahead.txt")
+;(read-info-from-dump info_back "hp_back.txt")
+;(read-info-from-dump info_ahead "lotr_ahead.txt")
+;(read-info-from-dump info_back "lotr_back.txt")
+;(read-info-from-dump info_ahead (string-append "all_ahead" (number->string N)))
+;(read-info-from-dump info_back (string-append "all_back" (number->string N)))
+
+(define (process-small)
+  (let read-loop ((i 1))
+    (cond ((<= i 38)
+           (process-file (string-append (string-append "texts/" (number->string i)) ".txt"))
+           (read-loop (+ i 1))))
+    )
+  (dump-info info_ahead (string-append "small_ahead" (number->string N)))
+  (dump-info info_back (string-append "small_back" (number->string N)))
+  )
+
+
+; обучиться и забекапить результат со всего, что есть
+(define (process-all)
+  (let read-loop ((i 1))
+    (cond ((<= i 38)
+           (process-file (string-append (string-append "texts/" (number->string i)) ".txt"))
+           (read-loop (+ i 1))))
+   )
+  (process-file "hp_all.txt")
+  (process-file "sh.txt")
+  (process-file "lotr.txt")
+
+  (dump-info info_ahead (string-append "all_ahead" (number->string N)))
+  (dump-info info_back (string-append "all_back" (number->string N)))
+)
+
+(define (read-all)
+  (read-info-from-dump info_ahead (string-append "all_ahead" (number->string N)))
+  (read-info-from-dump info_back (string-append "all_back" (number->string N))))
+
+(define (read-small)
+  (read-info-from-dump info_ahead (string-append "small_ahead" (number->string N)))
+  (read-info-from-dump info_back (string-append "small_back" (number->string N))))
+
+(define (test-direct-gen)
+  (let* ((keys (hash-keys info_ahead))
+         (len (length keys))
+         (val (list-ref keys (random len))))
+    (printf "input value: \"~a\"\n" val)
+    (direct-gen (text-to-inner val)))
+  )
+
+(define (test-mixed-gen)
+  (let* ((keys (hash-keys info_ahead))
+         (len (length keys))
+         (val (let loop ((possible_val (list-ref keys (random len))))
+                (if (hash-has-key? info_back possible_val)
+                    possible_val
+                    (loop (list-ref keys (random len)))))))
+    (printf "input value: \"~a\"\n" val)
+    (mixed-gen (text-to-inner val)))
+  )
 ; ex 7
 (define (doctor-driver-loop name)
   (let loop ((prev-responses #()))
@@ -562,7 +623,7 @@
      (let ((user-response (text-to-inner (read-line))))
        (cond
          ((null? user-response) (printf "I will wait for your answer.\n") (loop prev-responses))
-         ((equal? (caar user-response) "Goodbye") ; реплика, начинающаяся с goodbye, служит для выхода из цикла
+         ((equal? (caar user-response) "goodbye") ; реплика, начинающаяся с goodbye, служит для выхода из цикла
           (printf "Goodbye, ~a!\n" name)
           (printf "See you next week.\n")
          )
